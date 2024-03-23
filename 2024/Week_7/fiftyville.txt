@@ -1,72 +1,61 @@
--- ################################# 1
--- Get the name of the thief
-SELECT name FROM people
-
--- Query security logs
-WHERE people.license_plate IN (
-    -- Get the license plates from the courthouse logs
-    SELECT license_plate FROM courthouse_security_logs
-    -- In the ten minute time frame (10:15 - 10:25)
-    WHERE year = 2020 AND month = 7 AND day = 28 AND hour = 10 AND minute > 15 AND minute < 25
-)
-
--- Query ATM transactions
-AND people.id IN (
-    -- Get person_id from the ATM transactions
-    SELECT person_id FROM bank_accounts
-    -- Let's join the bank account information so that we can grab the person_id
-    JOIN atm_transactions ON atm_transactions.account_number = bank_accounts.account_number
-    -- Transaction was on the day of the crime
-    WHERE atm_transactions.year = 2020 AND atm_transactions.month = 7 AND atm_transactions.day = 28
-    -- It was a withdrawal
-    AND transaction_type = "withdraw"
-    -- It occured on Fifer Street
-    AND atm_transactions.atm_location = "Fifer Street"
-)
-
--- Query calls
-AND people.phone_number IN (
-    -- Get the phone numbers from calls
-    SELECT caller FROM phone_calls
-    -- Date of the crime
-    WHERE year = 2020 AND month = 7 AND day = 28
-    -- Duration less than a minute
-    AND duration < 60
-)
-
--- Query first flight passenger list
-AND people.passport_number IN (
-    -- Get the passport numbers of passengers
-    SELECT passport_number FROM passengers
-    -- On the first flight
-    WHERE flight_id IN (
-        -- Get the id of the first flight of the next day
-        SELECT id FROM flights WHERE year = 2020 AND month = 7 AND day = 29
-        ORDER BY hour, minute ASC LIMIT 1
-    )
-);
--- ################################# 2
--- Get the city name
-SELECT city FROM airports
--- From the first flight of the day
-WHERE id IN (
-    SELECT destination_airport_id FROM flights WHERE year = 2020 AND month = 7 AND day = 29
-    ORDER BY hour, minute ASC LIMIT 1
-);
--- ################################# 3
--- Get the accomplice's name
-SELECT name FROM people
--- Using their phone number
-WHERE phone_number IN (
-    -- From the list of phone calls
-    SELECT receiver FROM phone_calls
-    -- On the date of the crime
-    WHERE year = 2020 AND month = 7 AND day = 28
-    -- And where the caller was our criminal
-    AND caller = (
-        -- Ernest is a prick
-        SELECT phone_number FROM people WHERE name = "Ernest"
-    )
-    -- And to reduce the likelihood of getting more than one result, let's constrain it a little more
-    AND duration < 60
-);
+-- # 1
+SELECT * FROM crime_scene_reports
+WHERE street = 'Humphrey Street';
+-- Свидетели пекарни --
+Select * FROM interviews
+WHERE transcript LIKE '%bakery%';
+-- Свидетель 1  --
+SELECT * FROM bakery_security_logs WHERE year = 2023 AND month = 7 AND day = 28 AND hour = 10 AND minute BETWEEN 15 AND 25;
+-- проверка по номерным знакам --
+SELECT p.name, bsl.activity, bsl.license_plate, bsl.year, bsl.month, bsl.day, bsl.hour, bsl.minute
+FROM bakery_security_logs bsl
+JOIN people p ON p.license_plate = bsl.license_plate
+WHERE bsl.year = 2023 AND bsl.month = 7 AND bsl.day = 28 AND bsl.hour = 10 AND bsl.minute BETWEEN 15 AND 25;
+-- Проверьте свидетеля 2 по поводу банкомата. --
+SELECT * FROM atm_transactions WHERE atm_location = 'Leggett Street' AND year = 2023 AND month = 7 AND day = 28;
+-- добавить название пункта снятия в банкомате --
+SELECT a.*, p.name
+FROM atm_transactions a
+JOIN bank_accounts b ON a.account_number = b.account_number
+JOIN people p ON b.person_id = p.id
+WHERE a.atm_location = 'Leggett Street' AND a.year = 2023 AND a.month = 7 AND a.day = 28 AND a.transaction_type = 'withdraw';
+-- Расследование телефонного звонка свидетеля 3 --
+SELECT *
+FROM phone_calls
+WHERE year = 2023 AND month = 7 AND day = 28 AND duration < 60
+-- добавить имена в список звонков --
+SELECT p.name, pc.caller, pc.receiver, pc.year, pc.month, pc.day, pc.duration
+FROM phone_calls pc
+JOIN people p ON pc.caller = p.phone_number
+WHERE pc.year = 2023 AND pc.month = 7 AND pc.day = 28 AND pc.duration < 60;
+-- исследовать аэропорт, чтобы добраться до пятьдесятвилля --
+SELECT * FROM airports;
+-- найдя идентификатор пятьдесятвилля (8) изучите рейсы--
+SELECT f.*, origin.full_name AS origin_airport, destination.full_name AS destination_airport
+FROM flights f
+JOIN airports origin ON f.origin_airport_id = origin.id
+JOIN airports destination ON f.destination_airport_id = destination.id
+WHERE origin.id = 8 AND f.year = 2023 AND f.month = 7 AND f.day = 29
+ORDER BY f.hour, f.minute;
+-- объединить информацию из всех трех свидетельств --
+SELECT p.name
+FROM bakery_security_logs bsl
+JOIN people p ON p.license_plate = bsl.license_plate
+JOIN bank_accounts ba ON ba.person_id = p.id
+JOIN atm_transactions at ON at.account_number = ba.account_number
+JOIN phone_calls pc ON pc.caller = p.phone_number
+WHERE bsl.year = 2023 AND bsl.month = 7 AND bsl.day = 28 AND bsl.hour = 10 AND bsl.minute BETWEEN 15 AND 25
+AND at.atm_location = 'Leggett Street' AND at.year = 2023 AND at.month = 7 AND at.day = 28 AND at.transaction_type = 'withdraw'
+AND pc.year = 2023 AND pc.month = 7 AND pc.day = 28 AND pc.duration < 60;
+-- Сузьте список до Брюса/Дианы, который находится в полете. --
+SELECT p.name
+FROM people p
+JOIN passengers ps ON p.passport_number = ps.passport_number
+WHERE ps.flight_id = 36
+AND p.name in ('Bruce', 'Diana');
+--кому звонил Брюс?--
+SELECT p2.name as receiver
+FROM phone_calls pc
+JOIN people p1 ON pc.caller = p1.phone_number
+JOIN people p2 ON pc.receiver = p2.phone_number
+WHERE p1.name = 'Bruce' AND pc.year = 2023 AND pc.month = 7 AND pc.day = 28 AND pc.duration < 60;
